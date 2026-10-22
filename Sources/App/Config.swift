@@ -2,7 +2,7 @@ import Foundation
 
 enum Config {
     /// 구글 클라우드 콘솔에서 만든 iOS 클라이언트 ID
-    static let clientID = "PASTE_CLIENT_ID.apps.googleusercontent.com"
+    static let clientID = "884224606179-3ie8ig9o2p9ptrbs9dshahpf38tj899j.apps.googleusercontent.com"
 
     static var isConfigured: Bool { !clientID.hasPrefix("PASTE") }
 

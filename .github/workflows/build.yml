@@ -17,7 +17,7 @@ jobs:
   build:
     runs-on: macos-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Xcode version
         run: xcodebuild -version
@@ -43,7 +43,7 @@ jobs:
           cp -R build/Release-iphoneos/DriveMusic.app Payload/
           zip -qry DriveMusic.ipa Payload
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v5
         with:
           name: DriveMusic-ipa
           path: DriveMusic.ipa
