@@ -1,0 +1,87 @@
+name: build
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: build
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Xcode version
+        run: xcodebuild -version
+
+      - name: Generate project
+        run: |
+          brew install xcodegen
+          xcodegen generate
+
+      - name: Build
+        run: |
+          set -o pipefail
+          xcodebuild -project DriveMusic.xcodeproj -target DriveMusic \
+            -configuration Release -sdk iphoneos -quiet \
+            MARKETING_VERSION=1.0.${{ github.run_number }} \
+            CURRENT_PROJECT_VERSION=${{ github.run_number }} \
+            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" \
+            SYMROOT="$PWD/build" build
+
+      - name: Package IPA
+        run: |
+          mkdir -p Payload
+          cp -R build/Release-iphoneos/DriveMusic.app Payload/
+          zip -qry DriveMusic.ipa Payload
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: DriveMusic-ipa
+          path: DriveMusic.ipa
+
+      - name: Publish release and SideStore source
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VER: 1.0.${{ github.run_number }}
+          BUILD: ${{ github.run_number }}
+          REPO: ${{ github.repository }}
+        run: |
+          SIZE=$(stat -f%z DriveMusic.ipa) python3 - <<'EOF'
+          import json, os, datetime
+          repo, ver, build = os.environ["REPO"], os.environ["VER"], os.environ["BUILD"]
+          base = f"https://github.com/{repo}/releases/download/latest"
+          app = {
+              "name": "드라이브 뮤직",
+              "bundleIdentifier": "com.jh.drivemusic",
+              "developerName": "me",
+              "subtitle": "구글 드라이브 음악 플레이어",
+              "localizedDescription": "구글 드라이브 폴더의 음악을 끊김 없이 재생합니다.",
+              "iconURL": f"https://raw.githubusercontent.com/{repo}/main/Resources/Assets.xcassets/AppIcon.appiconset/icon.png",
+              "version": ver,
+              "versionDate": datetime.date.today().isoformat(),
+              "downloadURL": f"{base}/DriveMusic.ipa",
+              "size": int(os.environ["SIZE"]),
+              "versions": [{
+                  "version": ver,
+                  "buildVersion": build,
+                  "date": datetime.datetime.now(datetime.timezone.utc).isoformat(),
+                  "downloadURL": f"{base}/DriveMusic.ipa",
+                  "size": int(os.environ["SIZE"]),
+                  "minOSVersion": "17.0",
+              }],
+          }
+          src = {"name": "드라이브 뮤직", "identifier": "com.jh.drivemusic.source", "apps": [app], "news": []}
+          json.dump(src, open("source.json", "w"), ensure_ascii=False, indent=2)
+          EOF
+          gh release view latest --repo "$REPO" >/dev/null 2>&1 || \
+            gh release create latest --repo "$REPO" --title "최신 빌드" --notes "자동 빌드"
+          gh release upload latest DriveMusic.ipa source.json --repo "$REPO" --clobber
+          gh release edit latest --repo "$REPO" --title "최신 빌드 $VER"
